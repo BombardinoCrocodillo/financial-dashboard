@@ -8,15 +8,13 @@ import io
 app = dash.Dash(__name__)
 
 app.layout = html.Div([
-    html.H1("Финансовый дашборд", style={'textAlign': 'center', 'color': '#2c3e50'}),
-    html.P("Загрузите CSV-файл с данными или используйте тестовые данные:", style={'margin': '10px'}),
+    html.H1("📊 Процесс управления инвестициями", style={'textAlign': 'center', 'color': '#1f77b4'}),
+
+    html.P("Загрузите CSV-файл с данными по инвестициям или используйте демо-набор:", style={'textAlign': 'center'}),
 
     dcc.Upload(
         id='upload-data',
-        children=html.Div([
-            'Перетащите файл сюда или ',
-            html.A('выберите файл')
-        ]),
+        children=html.Div(['Перетащите файл или ', html.A('выберите')]),
         style={
             'width': '100%', 'height': '60px', 'lineHeight': '60px',
             'borderWidth': '1px', 'borderStyle': 'dashed', 'borderRadius': '5px',
@@ -27,58 +25,67 @@ app.layout = html.Div([
 
     html.Br(),
 
-    html.Label("Выберите период анализа:"),
-    dcc.Dropdown(id='period-dropdown', placeholder="Не выбрано"),
+    html.Label("Фильтр по портфелю:", style={'margin': '10px'}),
+    dcc.Dropdown(id='portfolio-dropdown', placeholder="Все портфели", multi=True),
 
-    html.Br(),
-    dcc.Graph(id='line-chart'),
-    dcc.Graph(id='pie-chart'),
-    dcc.Graph(id='scatter-plot'),
+    html.Label("Фильтр по уровню риска:", style={'margin': '10px'}),
+    dcc.Dropdown(id='risk-dropdown', placeholder="Все уровни", multi=True),
 
-    html.H3("Таблица данных", style={'marginTop': '30px'}),
+    dcc.Graph(id='return-bar'),
+    dcc.Graph(id='allocation-pie'),
+    dcc.Graph(id='value-scatter'),
+
+    html.H3("📊 Таблица инвестиционных активов", style={'marginTop': '30px'}),
     html.Div(id='table-container')
 ])
 
 @app.callback(
-    [Output('line-chart', 'figure'),
-     Output('pie-chart', 'figure'),
-     Output('scatter-plot', 'figure'),
-     Output('period-dropdown', 'options'),
+    [Output('return-bar', 'figure'),
+     Output('allocation-pie', 'figure'),
+     Output('value-scatter', 'figure'),
+     Output('portfolio-dropdown', 'options'),
+     Output('risk-dropdown', 'options'),
      Output('table-container', 'children')],
     [Input('upload-data', 'contents'),
-     Input('period-dropdown', 'value')],
+     Input('portfolio-dropdown', 'value'),
+     Input('risk-dropdown', 'value')],
     [State('upload-data', 'filename')]
 )
-def update_dashboard(contents, selected_period, filename):
+def update_dashboard(contents, selected_portfolios, selected_risks, filename):
     if contents is None:
-        # Используем тестовые данные из data.csv
         df = pd.read_csv('data.csv')
     else:
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
         df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
 
-    df['date'] = pd.to_datetime(df['date'])
-    df['period'] = df['date'].dt.to_period('M').astype(str)
+    # Фильтрация
+    filtered_df = df.copy()
+    if selected_portfolios:
+        filtered_df = filtered_df[filtered_df['portfolio'].isin(selected_portfolios)]
+    if selected_risks:
+        filtered_df = filtered_df[filtered_df['risk_level'].isin(selected_risks)]
 
-    if selected_period:
-        df = df[df['period'] == selected_period]
+    # Опции для dropdown'ов
+    portfolio_options = [{'label': p, 'value': p} for p in df['portfolio'].unique()]
+    risk_options = [{'label': r, 'value': r} for r in df['risk_level'].unique()]
 
-    periods = [{'label': p, 'value': p} for p in df['period'].unique()]
+    # График 1: Доходность по активам
+    bar_fig = px.bar(
+        filtered_df,
+        x='investment_type',
+        y='return_percent',
+        color='portfolio',
+        title='Доходность по типам инвестиций (%)',
+        labels={'return_percent': 'Доходность (%)', 'investment_type': 'Тип актива'}
+    )
 
-    line_fig = px.line(df, x='date', y=['income', 'expense'], title='Доходы и расходы')
-    pie_fig = px.pie(df, values='expense', names='category', title='Расходы по категориям')
-    scatter_fig = px.scatter(df, x='marketing_cost', y='profit', color='category', title='Прибыль vs Рекламные затраты')
+    # График 2: Распределение портфеля
+    pie_fig = px.pie(
+        filtered_df,
+        values='current_value',
+        names='investment_type',
+        title='Распределение текущей стоимости портфеля'
+    )
 
-    table = html.Table([
-        html.Thead(html.Tr([html.Th(col) for col in df.columns])),
-        html.Tbody([
-            html.Tr([html.Td(df.iloc[i][col]) for col in df.columns])
-            for i in range(min(len(df), 5))
-        ])
-    ], style={'border': '1px solid #ddd', 'borderCollapse': 'collapse', 'width': '100%'})
-
-    return line_fig, pie_fig, scatter_fig, periods, table
-
-if __name__ == '__main__':
-    app.run_server(debug=True)
+    # График 3: Текущая стоимость vs нач
