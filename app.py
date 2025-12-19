@@ -88,4 +88,33 @@ def update_dashboard(contents, selected_portfolios, selected_risks, filename):
         title='Распределение текущей стоимости портфеля'
     )
 
-    # График 3: Текущая стоимость vs нач
+    # График 3: Текущая стоимость vs начальные вложения
+    scatter_fig = px.scatter(
+        filtered_df,
+        x='initial_investment',
+        y='current_value',
+        size='return_percent',
+        color='risk_level',
+        hover_name='investment_type',
+        title='Начальные вложения vs Текущая стоимость (размер = доходность)'
+    )
+
+    # Таблица
+    table = html.Table([
+        html.Thead(html.Tr([html.Th(col) for col in filtered_df.columns])),
+        html.Tbody([
+            html.Tr([html.Td(filtered_df.iloc[i][col]) for col in filtered_df.columns])
+            for i in range(min(len(filtered_df), 10))
+        ])
+    ], style={
+        'border': '1px solid #ccc',
+        'borderCollapse': 'collapse',
+        'width': '100%',
+        'fontSize': '14px'
+    })
+
+    return bar_fig, pie_fig, scatter_fig, portfolio_options, risk_options, table
+
+
+if __name__ == '__main__':
+    app.run(debug=True)  # ← ИСПРАВЛЕНО! Не run_server, а run
